@@ -55,7 +55,46 @@
     { id: 'quarter', name: '♩ quarter', beats: 1 },
     { id: 'eighth', name: '♪ eighth', beats: 0.5 },
     { id: 'dotted', name: '♪· dotted 8th', beats: 0.75 },
+    { id: 'distance', name: '↔ by distance', beats: null },
   ];
+
+  /*
+   * Distance mode: a step's length comes from how far the ball has to travel,
+   * so halving ticks by quickly and a 3n+1 leap gets a long note.
+   *
+   * Jumps span orders of magnitude, so distance is measured in log2 and then
+   * stretched across this ladder. The stretch is normalized per trajectory:
+   * mapping log2 straight onto the ladder pins everything to the long end
+   * once values get big (every jump is absolutely large up there), which
+   * flattens the whole point and drags the piece out. Normalizing keeps the
+   * full range of note lengths in play at any magnitude.
+   */
+  const DISTANCE_LADDER = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+
+  function jumpLog(seq, step) {
+    const from = Collatz.valueAt(seq, step);
+    const to = Collatz.valueAt(seq, step + 1);
+    return Math.log2(1 + Math.abs(to - from));
+  }
+
+  /* The log-distance span of a trajectory, including its terminal cycle. */
+  function buildDistanceScale(seq) {
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < seq.length + Collatz.TERMINAL_CYCLE.length; k++) {
+      const L = jumpLog(seq, k);
+      if (L < lo) lo = L;
+      if (L > hi) hi = L;
+    }
+    return { lo, hi };
+  }
+
+  function distanceDuration(scale, logDistance) {
+    const span = scale.hi - scale.lo;
+    // A trajectory with almost no variation (tiny starts) sits mid-ladder.
+    const t = span < 0.5 ? 0.5 : (logDistance - scale.lo) / span;
+    const index = Math.round(t * (DISTANCE_LADDER.length - 1));
+    return DISTANCE_LADDER[Math.min(Math.max(index, 0), DISTANCE_LADDER.length - 1)];
+  }
 
   const piece = {
     keyRoot: 0,
@@ -72,8 +111,9 @@
       voiceId,
       durationId,
       seq: Collatz.sequence(start),
+      distanceScale: null, // log-distance span, rebuilt when the trajectory changes
       // Per-play state:
-      stepBeats: 1,
+      onsets: [0],     // onsets[k] = beat on which step k lands; grown on demand
       nextStep: 0,
       lastLandedStep: -1,
       currentNote: null,
@@ -82,8 +122,29 @@
 
   const balls = [
     makeBall(27, 'pluck', 'quarter'),
-    makeBall(15, 'bell', 'dotted'),
+    makeBall(15, 'bell', 'distance'),
   ];
+
+  /* How long step k lasts, in beats. Fixed modes ignore the trajectory. */
+  function stepDurationBeats(ball, step) {
+    const fixed = DURATIONS.find(d => d.id === ball.durationId).beats;
+    if (fixed !== null) return fixed;
+    if (!ball.distanceScale) ball.distanceScale = buildDistanceScale(ball.seq);
+    return distanceDuration(ball.distanceScale, jumpLog(ball.seq, step));
+  }
+
+  /*
+   * Beat on which a step lands. Variable durations make this a running sum, so
+   * the table is extended lazily and reused by the scheduler, the frame loop,
+   * and pitch lookup — all of which walk forward through the same steps.
+   */
+  function onsetOf(ball, step) {
+    while (ball.onsets.length <= step) {
+      const last = ball.onsets.length - 1;
+      ball.onsets.push(ball.onsets[last] + stepDurationBeats(ball, last));
+    }
+    return ball.onsets[step];
+  }
 
   const transport = {
     playing: false,
@@ -120,6 +181,7 @@
         ball.start = Math.max(1, Math.min(999999, Math.floor(Number(numInput.value) || 1)));
         numInput.value = ball.start;
         ball.seq = Collatz.sequence(ball.start);
+        ball.distanceScale = null;
         Viz.reset();
       });
       row.appendChild(numInput);
@@ -249,8 +311,7 @@
   }
 
   function pitchOf(ball, step) {
-    const beat = step * ball.stepBeats;
-    const pool = chordPoolFor(chordAtBeat(beat));
+    const pool = chordPoolFor(chordAtBeat(onsetOf(ball, step)));
     return Theory.snapToPool(piece.rawPitch(Collatz.valueAt(ball.seq, step)), pool);
   }
 
@@ -264,7 +325,7 @@
     Viz.reset();
 
     for (const ball of balls) {
-      ball.stepBeats = DURATIONS.find(d => d.id === ball.durationId).beats;
+      ball.onsets = [0];
       ball.nextStep = 0;
       ball.lastLandedStep = -1;
       ball.currentNote = null;
@@ -297,16 +358,16 @@
     const spb = transport.secondsPerBeat;
 
     for (const ball of balls) {
-      while (transport.startTime + ball.nextStep * ball.stepBeats * spb < horizon) {
+      while (transport.startTime + onsetOf(ball, ball.nextStep) * spb < horizon) {
         const step = ball.nextStep;
-        const beat = step * ball.stepBeats;
+        const beat = onsetOf(ball, step);
         const time = transport.startTime + beat * spb;
         const downbeat = beat % Theory.BEATS_PER_BAR === 0;
         AudioEngine.playNote(
           ball.voiceId,
           pitchOf(ball, step),
           time,
-          ball.stepBeats * spb * 0.95,
+          stepDurationBeats(ball, step) * spb * 0.95,
           downbeat ? 0.9 : 0.7
         );
         ball.nextStep++;
@@ -379,14 +440,20 @@
     return (AudioEngine.now() - transport.startTime) / transport.secondsPerBeat;
   }
 
+  /* Fractional step position for the bounce arc, spanning this step's own length. */
+  function stepFloatOf(ball, beat) {
+    const step = Math.max(0, ball.lastLandedStep);
+    const progress = (beat - onsetOf(ball, step)) / stepDurationBeats(ball, step);
+    return step + Math.min(1, Math.max(0, progress));
+  }
+
   function frame() {
     let beatFloat = 0;
     if (transport.playing) {
       beatFloat = Math.max(0, beatFloatNow());
       balls.forEach((ball, index) => {
-        const landed = Math.floor(beatFloat / ball.stepBeats);
         // Register every landing since the last frame (usually just one).
-        while (ball.lastLandedStep < landed) {
+        while (onsetOf(ball, ball.lastLandedStep + 1) <= beatFloat) {
           ball.lastLandedStep++;
           Viz.registerHit(Collatz.valueAt(ball.seq, ball.lastLandedStep), ballColor(index));
           ball.currentNote = Theory.midiToName(pitchOf(ball, ball.lastLandedStep));
@@ -400,7 +467,7 @@
       playing: transport.playing,
       balls: balls.map((ball, index) => ({
         seq: ball.seq,
-        stepFloat: transport.playing ? beatFloat / ball.stepBeats : 0,
+        stepFloat: transport.playing ? stepFloatOf(ball, beatFloat) : 0,
         color: ballColor(index),
         getValue: k => Collatz.valueAt(ball.seq, k),
       })),

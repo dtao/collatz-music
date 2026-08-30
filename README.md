@@ -6,8 +6,19 @@ Pick one or more starting numbers (up to 4 balls), a key, a chord
 progression, and a BPM, then press **Play**. Each ball bounces along a
 number line following its number's Collatz trajectory (halve if even,
 3n + 1 if odd). Each ball has its own voice (Pluck, Bell, Square, or Airy)
-and its own note duration — quarter, eighth, or dotted eighth — so two
-balls at different durations phase against each other polyrhythmically.
+and its own note duration — quarter, eighth, dotted eighth, or **by
+distance** — so balls at different durations phase against each other
+polyrhythmically.
+
+In **by distance** mode a note's length is set by how far the ball has to
+travel to reach the next number, so a halving step ticks past quickly while
+a 3n + 1 leap rings out. Jumps span orders of magnitude, so distance is
+measured in log2 and stretched across a ladder from a sixteenth to a full
+bar. That stretch is normalized per trajectory: mapping log2 straight onto
+the ladder pins every note to the long end once values get big (up there
+*every* jump is absolutely large), which flattens the contrast and drags
+the piece out — normalizing keeps the full range of note lengths in play at
+any magnitude, and makes the closing 4 → 2 → 1 cycle settle into fast ticks.
 Each landing plays a note: the number's magnitude sets a raw pitch
 (log-scaled, so halving steps descend by a fixed interval), which is then
 snapped to the nearest chord tone of the current bar's chord — so the melody
