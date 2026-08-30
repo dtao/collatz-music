@@ -200,36 +200,3 @@ main {
   display: block;
 }
 
-#hud {
-  position: absolute;
-  top: 14px;
-  left: 18px;
-  display: flex;
-  gap: 26px;
-  pointer-events: none;
-}
-
-.hud-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.hud-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-}
-
-.hud-value {
-  font-size: 22px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-#hud-chord { color: var(--accent); }
-
-
-
-
-

@@ -33,13 +33,11 @@
   const bpmInput = document.getElementById('bpm');
   const bpmValue = document.getElementById('bpm-value');
   const playButton = document.getElementById('play-button');
-  const hudChord = document.getElementById('hud-chord');
-  const hudBar = document.getElementById('hud-bar');
 
   const required = {
     'ball-list': ballList, 'add-ball': addBallButton, 'key-select': keySelect,
     'progression-select': progSelect, 'bpm': bpmInput, 'bpm-value': bpmValue,
-    'play-button': playButton, 'hud-chord': hudChord, 'hud-bar': hudBar,
+    'play-button': playButton,
     'viz': document.getElementById('viz'),
   };
   const missing = Object.keys(required).filter(id => !required[id]);
@@ -115,7 +113,7 @@
       distanceScale: null, // log-distance span, rebuilt when the trajectory changes
       // Per-play state:
       onsets: [0],     // onsets[k] = beat on which step k lands; grown on demand
-      entries: [],     // scrolling ticker history: { value, odd, beat }
+      entries: [],     // ticker history: { value, odd, beat, durationBeats }
       nextStep: 0,
       lastLandedStep: -1,
     };
@@ -349,8 +347,6 @@
     clearInterval(transport.schedulerTimer);
     playButton.textContent = 'Play';
     playButton.classList.remove('playing');
-    hudChord.textContent = '–';
-    hudBar.textContent = '–';
   }
 
   function scheduleAhead() {
@@ -384,17 +380,6 @@
     }
   }
 
-  // ---- HUD ----
-
-  /* Per-ball readout lives in the canvas ticker; the HUD just tracks harmony. */
-  function updateHud(beatFloat) {
-    if (!transport.playing) return;
-    const chord = chordAtBeat(Math.max(0, beatFloat));
-    hudChord.textContent = `${Theory.chordName(piece.keyRoot, chord)} (${chord.numeral})`;
-    const barCount = piece.progression.chords.length;
-    hudBar.textContent = (Math.floor(Math.max(0, beatFloat) / Theory.BEATS_PER_BAR) % barCount) + 1;
-  }
-
   // ---- Frame loop ----
 
   function beatFloatNow() {
@@ -422,14 +407,13 @@
             value,
             odd: value % 2 === 1,
             beat: onsetOf(ball, ball.lastLandedStep),
+            durationBeats: stepDurationBeats(ball, ball.lastLandedStep),
           });
           if (ball.entries.length > MAX_TICKER_ENTRIES) ball.entries.shift();
         }
       });
       transport.lastBeatFloat = beatFloat;
     }
-
-    updateHud(beatFloat);
 
     Viz.draw({
       playing: transport.playing,

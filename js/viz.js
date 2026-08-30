@@ -25,14 +25,29 @@ const Viz = (() => {
     laneRule: 'rgba(219, 226, 236, 0.06)',
   };
 
+  /*
+   * The lane reads like a number line written on an infinitely long strip with
+   * the view panning right along it: a new number appears at the right edge and
+   * the whole line drifts left, oldest first, retiring only at the far left.
+   *
+   * A step advances the line by its own length in beats, floored at minGap so a
+   * fast step still leaves room for the next number. Above that floor the
+   * spacing stays proportional, so a distance-mode ball's rhythm is legible in
+   * the gaps.
+   */
   const TICKER = {
-    top: 70,
+    top: 18,
     laneHeight: 46,
-    gutter: 84,        // fixed lane badge; entries emerge from here
-    pxPerBeat: 150,    // scroll speed, in beats so it tracks tempo changes
-    fadeIn: 12,        // brief: a landing should read as crisp on its attack
-    fadeOut: 150,
+    gutter: 84,        // lane badge; numbers fade out as they reach it
+    spawnInset: 24,    // newest number's right edge, in from the canvas edge
+    pxPerBeat: 70,
+    minGap: 66,
+    fadeOut: 54,
   };
+
+  function gapAfter(durationBeats) {
+    return Math.max(TICKER.minGap, durationBeats * TICKER.pxPerBeat);
+  }
 
   const FONT = '"Avenir Next", "Segoe UI", system-ui, sans-serif';
 
@@ -230,11 +245,6 @@ const Viz = (() => {
     }
   }
 
-  /*
-   * One scrolling lane per ball. An entry is pinned to the beat it landed on
-   * and slides right at a constant rate, so the gaps between numbers are the
-   * rhythm made visible — a distance-mode ball spaces them unevenly.
-   */
   function drawTicker(state) {
     state.balls.forEach((ball, laneIndex) => {
       const laneTop = TICKER.top + laneIndex * TICKER.laneHeight;
@@ -247,42 +257,43 @@ const Viz = (() => {
       }
 
       // Lane badge: which ball this is, and where it started.
+      g.textBaseline = 'alphabetic';
+      g.textAlign = 'left';
       g.fillStyle = ball.color;
       g.beginPath();
       g.arc(18, numberY - 5, 5, 0, Math.PI * 2);
       g.fill();
-      g.textAlign = 'left';
-      g.textBaseline = 'alphabetic';
       g.font = `600 12px ${FONT}`;
       g.fillStyle = hexToRgba(ball.color, 0.85);
       g.fillText(String(ball.start), 30, numberY);
 
-      let prevRight = TICKER.gutter - 8;
-      for (let i = ball.entries.length - 1; i >= 0; i--) {
-        const entry = ball.entries[i];
-        // Walking newest first, so x grows with every step back through history.
-        const x = TICKER.gutter + (state.beatFloat - entry.beat) * TICKER.pxPerBeat;
-        if (x > width + 40) break;            // this and everything older is off-screen
-        if (x < TICKER.gutter - 1) continue;  // not landed yet
+      const entries = ball.entries;
+      if (!entries.length) return;
 
-        const label = String(entry.value);
-        // Cheap width estimate keeps crowded runs from overlapping into mush.
-        const textWidth = label.length * 10;
-        if (x < prevRight) continue;
-        prevRight = x + textWidth + 10;
+      // How far the newest number has drifted since it landed. When it has
+      // covered a full gap, the next number arrives at the right edge.
+      const head = entries[entries.length - 1];
+      const headSpan = Math.max(head.durationBeats, 1e-6);
+      const progress = Math.min(1, Math.max(0, (state.beatFloat - head.beat) / headSpan));
 
-        const alpha = Math.max(0, Math.min(1,
-          (x - TICKER.gutter) / TICKER.fadeIn,
-          (width - x) / TICKER.fadeOut));
-        if (alpha <= 0) continue;
+      g.textAlign = 'right';
+      let drift = progress * gapAfter(head.durationBeats);
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const x = width - TICKER.spawnInset - drift;
+        if (x < TICKER.gutter - 30) break; // this and everything older has retired
 
-        g.font = `600 17px ${FONT}`;
-        g.fillStyle = hexToRgba(entry.odd ? COLORS.odd : COLORS.even, alpha);
-        g.fillText(label, x, numberY);
+        const entry = entries[i];
+        const alpha = Math.min(1, Math.max(0, (x - TICKER.gutter) / TICKER.fadeOut));
+        if (alpha > 0) {
+          g.font = `600 17px ${FONT}`;
+          g.fillStyle = hexToRgba(entry.odd ? COLORS.odd : COLORS.even, alpha);
+          g.fillText(String(entry.value), x, numberY);
 
-        g.font = `11px ${FONT}`;
-        g.fillStyle = `rgba(125, 138, 156, ${0.85 * alpha})`;
-        g.fillText(entry.odd ? '×3+1' : '÷2', x, opY);
+          g.font = `11px ${FONT}`;
+          g.fillStyle = `rgba(125, 138, 156, ${0.85 * alpha})`;
+          g.fillText(entry.odd ? '×3+1' : '÷2', x, opY);
+        }
+        if (i > 0) drift += gapAfter(entries[i - 1].durationBeats);
       }
     });
   }
