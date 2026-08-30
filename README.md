@@ -37,6 +37,14 @@ python3 -m http.server
 
 (Opening `index.html` directly from the filesystem also works.)
 
+Browsers cache the CSS and JS aggressively, and a page that loads a stale
+mix of files can fail to start. Assets are requested with a `?v=N` query
+string to prevent that — **bump the number on every `<script>` and `<link>`
+tag in `index.html` whenever you change a JS or CSS file**. If the app ever
+does fail to boot it now says so in a red banner at the bottom of the page
+rather than leaving dead controls, and a force-reload
+(Cmd/Ctrl + Shift + R) clears it.
+
 ## Code layout
 
 | File | Purpose |

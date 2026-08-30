@@ -1,5 +1,31 @@
 /* UI wiring, transport, and the note scheduler. */
 (() => {
+  /* A boot failure here would otherwise leave dead controls and no clue why. */
+  function reportBootError(err) {
+    console.error(err);
+    let banner = document.getElementById('boot-error');
+    if (!banner) {
+      // A stale index.html won't have the placeholder; make one so the failure is still visible.
+      banner = document.createElement('div');
+      banner.id = 'boot-error';
+      document.body.appendChild(banner);
+    }
+    banner.hidden = false;
+    banner.style.cssText =
+      'position:fixed;left:0;right:0;bottom:0;z-index:10;padding:12px 20px;' +
+      'background:#ff5d73;color:#1c0508;font:13px/1.5 system-ui,sans-serif;display:block';
+    banner.textContent =
+      'Collatz Music failed to start: ' + err.message +
+      ' — if you just updated, force-reload the page (Cmd/Ctrl + Shift + R) to clear cached files.';
+  }
+
+  try {
+    boot();
+  } catch (err) {
+    reportBootError(err);
+  }
+
+  function boot() {
   const ballList = document.getElementById('ball-list');
   const addBallButton = document.getElementById('add-ball');
   const keySelect = document.getElementById('key-select');
@@ -10,6 +36,15 @@
   const hudChord = document.getElementById('hud-chord');
   const hudBar = document.getElementById('hud-bar');
   const hudBalls = document.getElementById('hud-balls');
+
+  const required = {
+    'ball-list': ballList, 'add-ball': addBallButton, 'key-select': keySelect,
+    'progression-select': progSelect, 'bpm': bpmInput, 'bpm-value': bpmValue,
+    'play-button': playButton, 'hud-chord': hudChord, 'hud-bar': hudBar,
+    'hud-balls': hudBalls, 'viz': document.getElementById('viz'),
+  };
+  const missing = Object.keys(required).filter(id => !required[id]);
+  if (missing.length) throw new Error('missing page elements: #' + missing.join(', #'));
 
   const LOOKAHEAD_S = 0.15;
   const SCHEDULER_INTERVAL_MS = 30;
@@ -380,4 +415,5 @@
   renderBallList();
   renderHudChips();
   requestAnimationFrame(frame);
+  }
 })();

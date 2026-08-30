@@ -171,6 +171,21 @@ body {
   color: #1c0508;
 }
 
+#boot-error[hidden] { display: none; }
+
+#boot-error {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 20px;
+  background: var(--stop);
+  color: #1c0508;
+  font-size: 13px;
+  line-height: 1.5;
+  z-index: 10;
+}
+
 main {
   position: relative;
   flex: 1;
