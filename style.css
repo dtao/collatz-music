@@ -1,0 +1,156 @@
+:root {
+  --bg: #0e1116;
+  --panel: #171c24;
+  --panel-edge: #232b37;
+  --text: #dbe2ec;
+  --text-dim: #7d8a9c;
+  --accent: #ffb347;
+  --accent-dim: #a86f1f;
+  --play: #3ddc84;
+  --stop: #ff5d73;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 14px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-edge);
+  flex-wrap: wrap;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.brand .tagline {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.control input[type="number"],
+.control select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.control input[type="number"] { width: 110px; }
+
+.control input[type="number"]:focus,
+.control select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.control-bpm { min-width: 160px; }
+
+.control input[type="range"] {
+  accent-color: var(--accent);
+  margin-top: 9px;
+}
+
+#bpm-value { color: var(--accent); }
+
+#play-button {
+  margin-left: auto;
+  min-width: 110px;
+  padding: 10px 26px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #08110b;
+  background: var(--play);
+  transition: filter 0.15s;
+}
+
+#play-button:hover { filter: brightness(1.1); }
+
+#play-button.playing {
+  background: var(--stop);
+  color: #1c0508;
+}
+
+main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#viz {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#hud {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  display: flex;
+  gap: 26px;
+  pointer-events: none;
+}
+
+.hud-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.hud-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+#hud-chord, #hud-note { color: var(--accent); }

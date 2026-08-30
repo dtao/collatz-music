@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Collatz Music</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="controls">
+    <div class="brand">
+      <h1>Collatz Music</h1>
+      <p class="tagline">3n&thinsp;+&thinsp;1, but you can dance to it</p>
+    </div>
+
+    <div class="control">
+      <label for="start-number">Start number</label>
+      <input type="number" id="start-number" min="1" max="999999" step="1" value="27">
+    </div>
+
+    <div class="control">
+      <label for="key-select">Key</label>
+      <select id="key-select"></select>
+    </div>
+
+    <div class="control">
+      <label for="progression-select">Progression</label>
+      <select id="progression-select"></select>
+    </div>
+
+    <div class="control control-bpm">
+      <label for="bpm">BPM <span id="bpm-value">100</span></label>
+      <input type="range" id="bpm" min="40" max="220" step="1" value="100">
+    </div>
+
+    <button id="play-button" class="play">Play</button>
+  </header>
+
+  <main>
+    <canvas id="viz"></canvas>
+    <div id="hud">
+      <div class="hud-item"><span class="hud-label">n</span><span id="hud-number" class="hud-value">–</span></div>
+      <div class="hud-item"><span class="hud-label">step</span><span id="hud-step" class="hud-value">–</span></div>
+      <div class="hud-item"><span class="hud-label">chord</span><span id="hud-chord" class="hud-value">–</span></div>
+      <div class="hud-item"><span class="hud-label">note</span><span id="hud-note" class="hud-value">–</span></div>
+    </div>
+  </main>
+
+  <script src="js/collatz.js"></script>
+  <script src="js/theory.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/viz.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
