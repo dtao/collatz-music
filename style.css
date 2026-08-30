@@ -73,7 +73,66 @@ body {
   font-family: inherit;
 }
 
-.control input[type="number"] { width: 110px; }
+.control input[type="number"] { width: 90px; }
+
+.control-balls { gap: 6px; }
+
+#ball-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ball-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ball-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.ball-row select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.ball-row .remove-ball {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ball-row .remove-ball:hover { color: var(--stop); }
+.ball-row .remove-ball:disabled { visibility: hidden; }
+
+#add-ball {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed var(--panel-edge);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#add-ball:hover { color: var(--text); border-color: var(--text-dim); }
+#add-ball[hidden] { display: none; }
 
 .control input[type="number"]:focus,
 .control select:focus {
@@ -153,4 +212,35 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-#hud-chord, #hud-note { color: var(--accent); }
+#hud-chord { color: var(--accent); }
+
+#hud-balls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.hud-ball {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(23, 28, 36, 0.75);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.hud-ball .ball-swatch { width: 10px; height: 10px; }
+
+.hud-ball .hud-ball-n {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+
+.hud-ball .hud-ball-note {
+  font-size: 13px;
+  color: var(--text-dim);
+  min-width: 34px;
+}

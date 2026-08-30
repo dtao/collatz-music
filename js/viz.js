@@ -1,4 +1,4 @@
-/* Canvas rendering: linear number line, camera follow, bouncing ball. */
+/* Canvas rendering: linear number line, camera follow, bouncing balls. */
 const Viz = (() => {
   let canvas, g;
   let width = 0, height = 0, dpr = 1;
@@ -7,9 +7,9 @@ const Viz = (() => {
   const camera = { vMin: 0, vMax: 40, initialized: false };
   let lastFrameTime = null;
 
-  // value → { lastHit: performance.now() ms } for glow decay on visited numbers.
+  // value → { lastHit: performance.now() ms, color } for glow decay on visited numbers.
   const visited = new Map();
-  // Landing flashes: { value, t0 }.
+  // Landing flashes: { value, t0, color }.
   let flashes = [];
 
   const COLORS = {
@@ -17,12 +17,14 @@ const Viz = (() => {
     tick: 'rgba(219, 226, 236, 0.5)',
     tickLabel: 'rgba(125, 138, 156, 0.9)',
     integerDot: 'rgba(219, 226, 236, 0.12)',
-    futureDot: 'rgba(125, 170, 220, 0.45)',
-    visitedDot: '#ffd28a',
-    ball: '#ffb347',
-    ballGlow: 'rgba(255, 179, 71, 0.35)',
-    flash: 'rgba(255, 210, 138,',
   };
+
+  function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const gg = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${gg}, ${b}, ${alpha})`;
+  }
 
   function attach(canvasEl) {
     canvas = canvasEl;
@@ -45,10 +47,10 @@ const Viz = (() => {
     camera.initialized = false;
   }
 
-  function registerHit(value) {
-    visited.set(value, performance.now());
-    flashes.push({ value, t0: performance.now() });
-    if (flashes.length > 24) flashes.shift();
+  function registerHit(value, color) {
+    visited.set(value, { lastHit: performance.now(), color });
+    flashes.push({ value, t0: performance.now(), color });
+    if (flashes.length > 32) flashes.shift();
   }
 
   function baselineY() {
@@ -60,15 +62,17 @@ const Viz = (() => {
     return margin + ((v - camera.vMin) / (camera.vMax - camera.vMin)) * (width - 2 * margin);
   }
 
-  /* Window around the ball's local neighborhood: current step plus a few ahead. */
+  /* Window covering every ball's local neighborhood: current step plus a few ahead. */
   function targetWindow(state) {
-    const i = Math.max(0, Math.floor(state.beatFloat));
     let lo = Infinity, hi = -Infinity;
-    for (let k = i - 1; k <= i + 4; k++) {
-      if (k < 0) continue;
-      const v = state.getValue(k);
-      lo = Math.min(lo, v);
-      hi = Math.max(hi, v);
+    for (const ball of state.balls) {
+      const i = Math.max(0, Math.floor(ball.stepFloat));
+      for (let k = i - 1; k <= i + 4; k++) {
+        if (k < 0) continue;
+        const v = ball.getValue(k);
+        lo = Math.min(lo, v);
+        hi = Math.max(hi, v);
+      }
     }
     let span = hi - lo;
     const minSpan = 8;
@@ -86,9 +90,12 @@ const Viz = (() => {
     if (state.playing) {
       target = targetWindow(state);
     } else {
-      // Idle: frame the whole trajectory.
-      const lo = Math.min(...state.seq);
-      const hi = Math.max(...state.seq);
+      // Idle: frame every ball's whole trajectory.
+      let lo = Infinity, hi = -Infinity;
+      for (const ball of state.balls) {
+        lo = Math.min(lo, ...ball.seq);
+        hi = Math.max(hi, ...ball.seq);
+      }
       const span = Math.max(8, hi - lo);
       target = { vMin: Math.max(-1, lo - span * 0.08), vMax: hi + span * 0.08 };
     }
@@ -158,34 +165,34 @@ const Viz = (() => {
   function drawSequenceDots(state) {
     const y = baselineY();
     const nowMs = performance.now();
-    const seen = new Set();
 
-    // Upcoming values (dim blue), skipping ones already visited.
-    const iCur = Math.floor(state.beatFloat);
-    for (let k = iCur; k <= iCur + 24; k++) {
-      const v = state.getValue(k);
-      if (visited.has(v) || seen.has(v)) continue;
-      seen.add(v);
-      const x = xOf(v);
-      if (x < -10 || x > width + 10) continue;
-      g.fillStyle = COLORS.futureDot;
-      g.beginPath();
-      g.arc(x, y, 3.5, 0, Math.PI * 2);
-      g.fill();
+    // Upcoming values (dim, in each ball's color), skipping ones already visited.
+    for (const ball of state.balls) {
+      const seen = new Set();
+      const iCur = Math.floor(ball.stepFloat);
+      g.fillStyle = hexToRgba(ball.color, 0.4);
+      for (let k = iCur; k <= iCur + 24; k++) {
+        const v = ball.getValue(k);
+        if (visited.has(v) || seen.has(v)) continue;
+        seen.add(v);
+        const x = xOf(v);
+        if (x < -10 || x > width + 10) continue;
+        g.beginPath();
+        g.arc(x, y, 3.5, 0, Math.PI * 2);
+        g.fill();
+      }
     }
 
-    // Visited values glow amber and slowly settle.
-    for (const [v, tHit] of visited) {
+    // Visited values glow in the color of the last ball to land there.
+    for (const [v, hit] of visited) {
       const x = xOf(v);
       if (x < -10 || x > width + 10) continue;
-      const age = (nowMs - tHit) / 1000;
+      const age = (nowMs - hit.lastHit) / 1000;
       const alpha = 0.45 + 0.55 * Math.exp(-age * 1.8);
-      g.globalAlpha = alpha;
-      g.fillStyle = COLORS.visitedDot;
+      g.fillStyle = hexToRgba(hit.color, alpha);
       g.beginPath();
       g.arc(x, y, 4, 0, Math.PI * 2);
       g.fill();
-      g.globalAlpha = 1;
     }
   }
 
@@ -198,7 +205,7 @@ const Viz = (() => {
       const x = xOf(f.value);
       if (x < -40 || x > width + 40) continue;
       const r = 6 + age * 30;
-      g.strokeStyle = COLORS.flash + (0.6 * (1 - age)) + ')';
+      g.strokeStyle = hexToRgba(f.color, 0.6 * (1 - age));
       g.lineWidth = 2;
       g.beginPath();
       g.arc(x, y, r, 0, Math.PI * 2);
@@ -206,29 +213,29 @@ const Viz = (() => {
     }
   }
 
-  function drawBall(state) {
+  function drawBall(state, ball) {
     const y = baselineY();
     let x, by;
 
     if (!state.playing) {
-      x = xOf(state.seq[0]);
+      x = xOf(ball.seq[0]);
       by = y - 9;
     } else {
-      const i = Math.max(0, Math.floor(state.beatFloat));
-      const p = Math.max(0, state.beatFloat - i);
-      const x0 = xOf(state.getValue(i));
-      const x1 = xOf(state.getValue(i + 1));
+      const i = Math.max(0, Math.floor(ball.stepFloat));
+      const p = Math.max(0, ball.stepFloat - i);
+      const x0 = xOf(ball.getValue(i));
+      const x1 = xOf(ball.getValue(i + 1));
       x = x0 + (x1 - x0) * p;
       const arcH = Math.min(Math.max(36, Math.abs(x1 - x0) * 0.28), height * 0.42);
       by = y - 9 - arcH * 4 * p * (1 - p);
     }
 
-    g.fillStyle = COLORS.ballGlow;
+    g.fillStyle = hexToRgba(ball.color, 0.35);
     g.beginPath();
     g.arc(x, by, 16, 0, Math.PI * 2);
     g.fill();
 
-    g.fillStyle = COLORS.ball;
+    g.fillStyle = ball.color;
     g.beginPath();
     g.arc(x, by, 8, 0, Math.PI * 2);
     g.fill();
@@ -251,7 +258,7 @@ const Viz = (() => {
     drawNumberLine();
     drawSequenceDots(state);
     drawFlashes();
-    drawBall(state);
+    for (const ball of state.balls) drawBall(state, ball);
   }
 
   return { attach, reset, registerHit, draw };

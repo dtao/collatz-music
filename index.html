@@ -13,9 +13,10 @@
       <p class="tagline">3n&thinsp;+&thinsp;1, but you can dance to it</p>
     </div>
 
-    <div class="control">
-      <label for="start-number">Start number</label>
-      <input type="number" id="start-number" min="1" max="999999" step="1" value="27">
+    <div class="control control-balls">
+      <label>Balls</label>
+      <div id="ball-list"></div>
+      <button id="add-ball" type="button">+ Add ball</button>
     </div>
 
     <div class="control">
@@ -39,10 +40,9 @@
   <main>
     <canvas id="viz"></canvas>
     <div id="hud">
-      <div class="hud-item"><span class="hud-label">n</span><span id="hud-number" class="hud-value">–</span></div>
-      <div class="hud-item"><span class="hud-label">step</span><span id="hud-step" class="hud-value">–</span></div>
       <div class="hud-item"><span class="hud-label">chord</span><span id="hud-chord" class="hud-value">–</span></div>
-      <div class="hud-item"><span class="hud-label">note</span><span id="hud-note" class="hud-value">–</span></div>
+      <div class="hud-item"><span class="hud-label">bar</span><span id="hud-bar" class="hud-value">–</span></div>
+      <div id="hud-balls"></div>
     </div>
   </main>
 

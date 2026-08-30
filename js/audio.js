@@ -1,4 +1,4 @@
-/* Web Audio synthesis: a plucky lead voice, a soft bass, and a feedback delay. */
+/* Web Audio synthesis: selectable per-ball voices, a soft bass, and a feedback delay. */
 const AudioEngine = (() => {
   let ctx = null;
   let master = null;
@@ -10,7 +10,7 @@ const AudioEngine = (() => {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
 
     master = ctx.createGain();
-    master.gain.value = 0.7;
+    master.gain.value = 0.6;
 
     const compressor = ctx.createDynamicsCompressor();
     compressor.threshold.value = -18;
@@ -53,44 +53,116 @@ const AudioEngine = (() => {
     if (delayNode) delayNode.delayTime.setValueAtTime(secondsPerBeat * 0.75, ctx.currentTime);
   }
 
-  /* The lead voice the bouncing ball plays: triangle + a quiet sine an octave up. */
-  function playNote(midi, time, duration, velocity = 0.8) {
-    const freq = Theory.midiToFreq(midi);
-
+  /* Shared per-note plumbing: envelope gain routed to master + delay send. */
+  function makeNoteOutput(time, peak, duration, attack = 0.012, midRatio = 0.35) {
     const gain = ctx.createGain();
+    gain.connect(master);
+    gain.connect(delaySend);
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(peak, time + attack);
+    gain.gain.exponentialRampToValueAtTime(Math.max(peak * midRatio, 0.0002), time + duration * 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    return gain;
+  }
+
+  function startStop(oscs, time, duration) {
+    for (const o of oscs) {
+      o.start(time);
+      o.stop(time + duration + 0.05);
+    }
+  }
+
+  /* Plucky triangle + a quiet sine an octave up, with a closing lowpass. */
+  function voicePluck(freq, time, duration, velocity) {
+    const gain = makeNoteOutput(time, 0.26 * velocity, duration);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(Math.min(freq * 6, 9000), time);
     filter.frequency.exponentialRampToValueAtTime(Math.max(freq * 1.5, 200), time + duration);
     filter.Q.value = 0.8;
+    filter.connect(gain);
 
     const osc1 = ctx.createOscillator();
     osc1.type = 'triangle';
     osc1.frequency.value = freq;
+    osc1.connect(filter);
 
     const osc2 = ctx.createOscillator();
     osc2.type = 'sine';
     osc2.frequency.value = freq * 2;
     const osc2Gain = ctx.createGain();
     osc2Gain.gain.value = 0.25;
-
-    osc1.connect(filter);
     osc2.connect(osc2Gain);
     osc2Gain.connect(filter);
+
+    startStop([osc1, osc2], time, duration);
+  }
+
+  /* Bell: sine fundamental + inharmonic partial, fast percussive decay. */
+  function voiceBell(freq, time, duration, velocity) {
+    const ring = Math.max(duration, Math.min(duration * 2, 1.4));
+    const gain = makeNoteOutput(time, 0.24 * velocity, ring, 0.005, 0.2);
+
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.value = freq;
+    osc1.connect(gain);
+
+    const partial = ctx.createOscillator();
+    partial.type = 'sine';
+    partial.frequency.value = freq * 2.76;
+    const partialGain = ctx.createGain();
+    partialGain.gain.setValueAtTime(0.18, time);
+    partialGain.gain.exponentialRampToValueAtTime(0.005, time + ring * 0.4);
+    partial.connect(partialGain);
+    partialGain.connect(gain);
+
+    startStop([osc1, partial], time, ring);
+  }
+
+  /* Hollow square through a lowpass — a bit reedy/chiptune. */
+  function voiceSquare(freq, time, duration, velocity) {
+    const gain = makeNoteOutput(time, 0.16 * velocity, duration, 0.015, 0.45);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(Math.min(freq * 4, 6000), time);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(freq * 2, 300), time + duration);
+    filter.Q.value = 1.2;
     filter.connect(gain);
-    gain.connect(master);
-    gain.connect(delaySend);
 
-    const peak = 0.28 * velocity;
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(peak, time + 0.012);
-    gain.gain.exponentialRampToValueAtTime(peak * 0.35, time + duration * 0.5);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    osc.connect(filter);
 
-    osc1.start(time);
-    osc2.start(time);
-    osc1.stop(time + duration + 0.05);
-    osc2.stop(time + duration + 0.05);
+    startStop([osc], time, duration);
+  }
+
+  /* Airy: two softly detuned sines with a slow attack, pad-like. */
+  function voiceAiry(freq, time, duration, velocity) {
+    const gain = makeNoteOutput(time, 0.24 * velocity, duration, Math.min(duration * 0.35, 0.12), 0.6);
+
+    const oscs = [-5, 5].map(cents => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = freq * Math.pow(2, cents / 1200);
+      o.connect(gain);
+      return o;
+    });
+
+    startStop(oscs, time, duration);
+  }
+
+  const VOICES = {
+    pluck: { name: 'Pluck', play: voicePluck },
+    bell: { name: 'Bell', play: voiceBell },
+    square: { name: 'Square', play: voiceSquare },
+    airy: { name: 'Airy', play: voiceAiry },
+  };
+
+  function playNote(voiceId, midi, time, duration, velocity = 0.8) {
+    const voice = VOICES[voiceId] || VOICES.pluck;
+    voice.play(Theory.midiToFreq(midi), time, duration, velocity);
   }
 
   /* A soft sustained root note grounding each bar. */
@@ -130,5 +202,5 @@ const AudioEngine = (() => {
     osc2.stop(time + duration + 0.05);
   }
 
-  return { init, resume, now, setDelayTime, playNote, playBass, get ctx() { return ctx; } };
+  return { init, resume, now, setDelayTime, playNote, playBass, VOICES, get ctx() { return ctx; } };
 })();
