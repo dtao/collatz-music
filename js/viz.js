@@ -1,4 +1,4 @@
-/* Canvas rendering: linear number line, camera follow, bouncing balls. */
+/* Canvas rendering: scrolling step ticker, linear number line, bouncing balls. */
 const Viz = (() => {
   let canvas, g;
   let width = 0, height = 0, dpr = 1;
@@ -17,7 +17,24 @@ const Viz = (() => {
     tick: 'rgba(219, 226, 236, 0.5)',
     tickLabel: 'rgba(125, 138, 156, 0.9)',
     integerDot: 'rgba(219, 226, 236, 0.12)',
+    // Parity decides which Collatz rule fires, so it drives the ticker colors:
+    // cool for the halving rule, warm for the one that grows.
+    even: '#7cc4ff',
+    odd: '#ff9f6b',
+    opLabel: 'rgba(125, 138, 156, 0.85)',
+    laneRule: 'rgba(219, 226, 236, 0.06)',
   };
+
+  const TICKER = {
+    top: 70,
+    laneHeight: 46,
+    gutter: 84,        // fixed lane badge; entries emerge from here
+    pxPerBeat: 150,    // scroll speed, in beats so it tracks tempo changes
+    fadeIn: 12,        // brief: a landing should read as crisp on its attack
+    fadeOut: 150,
+  };
+
+  const FONT = '"Avenir Next", "Segoe UI", system-ui, sans-serif';
 
   function hexToRgba(hex, alpha) {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -213,6 +230,63 @@ const Viz = (() => {
     }
   }
 
+  /*
+   * One scrolling lane per ball. An entry is pinned to the beat it landed on
+   * and slides right at a constant rate, so the gaps between numbers are the
+   * rhythm made visible — a distance-mode ball spaces them unevenly.
+   */
+  function drawTicker(state) {
+    state.balls.forEach((ball, laneIndex) => {
+      const laneTop = TICKER.top + laneIndex * TICKER.laneHeight;
+      const numberY = laneTop + 20;
+      const opY = laneTop + 34;
+
+      if (laneIndex < state.balls.length - 1) {
+        g.fillStyle = COLORS.laneRule;
+        g.fillRect(0, laneTop + TICKER.laneHeight - 1, width, 1);
+      }
+
+      // Lane badge: which ball this is, and where it started.
+      g.fillStyle = ball.color;
+      g.beginPath();
+      g.arc(18, numberY - 5, 5, 0, Math.PI * 2);
+      g.fill();
+      g.textAlign = 'left';
+      g.textBaseline = 'alphabetic';
+      g.font = `600 12px ${FONT}`;
+      g.fillStyle = hexToRgba(ball.color, 0.85);
+      g.fillText(String(ball.start), 30, numberY);
+
+      let prevRight = TICKER.gutter - 8;
+      for (let i = ball.entries.length - 1; i >= 0; i--) {
+        const entry = ball.entries[i];
+        // Walking newest first, so x grows with every step back through history.
+        const x = TICKER.gutter + (state.beatFloat - entry.beat) * TICKER.pxPerBeat;
+        if (x > width + 40) break;            // this and everything older is off-screen
+        if (x < TICKER.gutter - 1) continue;  // not landed yet
+
+        const label = String(entry.value);
+        // Cheap width estimate keeps crowded runs from overlapping into mush.
+        const textWidth = label.length * 10;
+        if (x < prevRight) continue;
+        prevRight = x + textWidth + 10;
+
+        const alpha = Math.max(0, Math.min(1,
+          (x - TICKER.gutter) / TICKER.fadeIn,
+          (width - x) / TICKER.fadeOut));
+        if (alpha <= 0) continue;
+
+        g.font = `600 17px ${FONT}`;
+        g.fillStyle = hexToRgba(entry.odd ? COLORS.odd : COLORS.even, alpha);
+        g.fillText(label, x, numberY);
+
+        g.font = `11px ${FONT}`;
+        g.fillStyle = `rgba(125, 138, 156, ${0.85 * alpha})`;
+        g.fillText(entry.odd ? '×3+1' : '÷2', x, opY);
+      }
+    });
+  }
+
   function drawBall(state, ball) {
     const y = baselineY();
     let x, by;
@@ -255,6 +329,7 @@ const Viz = (() => {
     g.clearRect(0, 0, width, height);
 
     updateCamera(state, dt);
+    drawTicker(state);
     drawNumberLine();
     drawSequenceDots(state);
     drawFlashes();

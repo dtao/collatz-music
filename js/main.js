@@ -35,13 +35,12 @@
   const playButton = document.getElementById('play-button');
   const hudChord = document.getElementById('hud-chord');
   const hudBar = document.getElementById('hud-bar');
-  const hudBalls = document.getElementById('hud-balls');
 
   const required = {
     'ball-list': ballList, 'add-ball': addBallButton, 'key-select': keySelect,
     'progression-select': progSelect, 'bpm': bpmInput, 'bpm-value': bpmValue,
     'play-button': playButton, 'hud-chord': hudChord, 'hud-bar': hudBar,
-    'hud-balls': hudBalls, 'viz': document.getElementById('viz'),
+    'viz': document.getElementById('viz'),
   };
   const missing = Object.keys(required).filter(id => !required[id]);
   if (missing.length) throw new Error('missing page elements: #' + missing.join(', #'));
@@ -50,6 +49,8 @@
   const SCHEDULER_INTERVAL_MS = 30;
   const MAX_BALLS = 4;
   const BALL_COLORS = ['#ffb347', '#58c4dd', '#7ee787', '#ff7eb6'];
+  // Enough to fill a very wide window even at the shortest step length.
+  const MAX_TICKER_ENTRIES = 200;
 
   const DURATIONS = [
     { id: 'quarter', name: '♩ quarter', beats: 1 },
@@ -114,9 +115,9 @@
       distanceScale: null, // log-distance span, rebuilt when the trajectory changes
       // Per-play state:
       onsets: [0],     // onsets[k] = beat on which step k lands; grown on demand
+      entries: [],     // scrolling ticker history: { value, odd, beat }
       nextStep: 0,
       lastLandedStep: -1,
-      currentNote: null,
     };
   }
 
@@ -151,6 +152,7 @@
     startTime: 0,        // AudioContext time of beat 0
     secondsPerBeat: 0.6,
     nextBarToSchedule: 0,
+    lastBeatFloat: 0,
     schedulerTimer: null,
   };
 
@@ -226,7 +228,6 @@
         balls.splice(index, 1);
         Viz.reset();
         renderBallList();
-        renderHudChips();
       });
       row.appendChild(removeButton);
 
@@ -245,7 +246,6 @@
     ));
     Viz.reset();
     renderBallList();
-    renderHudChips();
   });
 
   // ---- Other controls ----
@@ -326,9 +326,9 @@
 
     for (const ball of balls) {
       ball.onsets = [0];
+      ball.entries = [];
       ball.nextStep = 0;
       ball.lastLandedStep = -1;
-      ball.currentNote = null;
     }
 
     transport.secondsPerBeat = 60 / Number(bpmInput.value);
@@ -386,52 +386,13 @@
 
   // ---- HUD ----
 
-  const hudChips = []; // { root, n, note } DOM refs, parallel to balls
-
-  function renderHudChips() {
-    hudBalls.innerHTML = '';
-    hudChips.length = 0;
-    balls.forEach((ball, index) => {
-      const chip = document.createElement('div');
-      chip.className = 'hud-ball';
-
-      const swatch = document.createElement('span');
-      swatch.className = 'ball-swatch';
-      swatch.style.background = ballColor(index);
-      chip.appendChild(swatch);
-
-      const n = document.createElement('span');
-      n.className = 'hud-ball-n';
-      chip.appendChild(n);
-
-      const note = document.createElement('span');
-      note.className = 'hud-ball-note';
-      chip.appendChild(note);
-
-      hudBalls.appendChild(chip);
-      hudChips.push({ n, note });
-    });
-  }
-
+  /* Per-ball readout lives in the canvas ticker; the HUD just tracks harmony. */
   function updateHud(beatFloat) {
-    if (transport.playing) {
-      const chord = chordAtBeat(Math.max(0, beatFloat));
-      hudChord.textContent = `${Theory.chordName(piece.keyRoot, chord)} (${chord.numeral})`;
-      const barCount = piece.progression.chords.length;
-      hudBar.textContent = (Math.floor(Math.max(0, beatFloat) / Theory.BEATS_PER_BAR) % barCount) + 1;
-    }
-    balls.forEach((ball, index) => {
-      const chip = hudChips[index];
-      if (!chip) return;
-      if (transport.playing) {
-        const step = Math.max(0, ball.lastLandedStep);
-        chip.n.textContent = Collatz.valueAt(ball.seq, step);
-        chip.note.textContent = ball.currentNote || '';
-      } else {
-        chip.n.textContent = ball.start;
-        chip.note.textContent = '';
-      }
-    });
+    if (!transport.playing) return;
+    const chord = chordAtBeat(Math.max(0, beatFloat));
+    hudChord.textContent = `${Theory.chordName(piece.keyRoot, chord)} (${chord.numeral})`;
+    const barCount = piece.progression.chords.length;
+    hudBar.textContent = (Math.floor(Math.max(0, beatFloat) / Theory.BEATS_PER_BAR) % barCount) + 1;
   }
 
   // ---- Frame loop ----
@@ -455,18 +416,29 @@
         // Register every landing since the last frame (usually just one).
         while (onsetOf(ball, ball.lastLandedStep + 1) <= beatFloat) {
           ball.lastLandedStep++;
-          Viz.registerHit(Collatz.valueAt(ball.seq, ball.lastLandedStep), ballColor(index));
-          ball.currentNote = Theory.midiToName(pitchOf(ball, ball.lastLandedStep));
+          const value = Collatz.valueAt(ball.seq, ball.lastLandedStep);
+          Viz.registerHit(value, ballColor(index));
+          ball.entries.push({
+            value,
+            odd: value % 2 === 1,
+            beat: onsetOf(ball, ball.lastLandedStep),
+          });
+          if (ball.entries.length > MAX_TICKER_ENTRIES) ball.entries.shift();
         }
       });
+      transport.lastBeatFloat = beatFloat;
     }
 
     updateHud(beatFloat);
 
     Viz.draw({
       playing: transport.playing,
+      // Stopping freezes the ticker where it was rather than snapping it away.
+      beatFloat: transport.playing ? beatFloat : transport.lastBeatFloat,
       balls: balls.map((ball, index) => ({
         seq: ball.seq,
+        start: ball.start,
+        entries: ball.entries,
         stepFloat: transport.playing ? stepFloatOf(ball, beatFloat) : 0,
         color: ballColor(index),
         getValue: k => Collatz.valueAt(ball.seq, k),
@@ -480,7 +452,6 @@
 
   Viz.attach(document.getElementById('viz'));
   renderBallList();
-  renderHudChips();
   requestAnimationFrame(frame);
   }
 })();

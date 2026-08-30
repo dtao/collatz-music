@@ -229,33 +229,7 @@ main {
 
 #hud-chord { color: var(--accent); }
 
-#hud-balls {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
 
-.hud-ball {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(23, 28, 36, 0.75);
-  border: 1px solid var(--panel-edge);
-  border-radius: 8px;
-  padding: 6px 12px;
-}
 
-.hud-ball .ball-swatch { width: 10px; height: 10px; }
 
-.hud-ball .hud-ball-n {
-  font-size: 18px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  min-width: 44px;
-}
 
-.hud-ball .hud-ball-note {
-  font-size: 13px;
-  color: var(--text-dim);
-  min-width: 34px;
-}

@@ -35,6 +35,12 @@ harmonic.
 - When a trajectory reaches 1, it rides the famous 4 → 2 → 1 loop as a
   low ostinato until you press Stop.
 - A soft bass note grounds each bar on the chord root.
+- Each ball gets a scrolling lane at the top showing the numbers it has hit.
+  A number appears at the lane's badge the instant its note sounds and slides
+  rightward, so history trails off to the right and the gaps between numbers
+  are the rhythm made visible. Numbers are colored by which rule they trigger
+  — blue for even (÷2), orange for odd (×3+1) — with the operation in small
+  gray text beneath.
 
 ## Running
 
